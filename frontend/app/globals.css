@@ -1,0 +1,110 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #0a0a0f;
+  --foreground: #f3f4f6;
+
+  --card: #12121a;
+  --card-foreground: #f3f4f6;
+  --card-hover: #181824;
+  --card-border: #1f1f2e;
+
+  --agent-planner: #3b82f6;
+  --agent-architect: #a855f7;
+  --agent-coder: #10b981;
+  --agent-tester: #eab308;
+  --agent-reviewer: #f97316;
+  --agent-devops: #ef4444;
+
+  --primary: #6366f1;
+  --primary-glow: rgba(99, 102, 241, 0.35);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  padding: 0;
+  margin: 0;
+  background-color: var(--background);
+  color: var(--foreground);
+  font-feature-settings: "rlig" 1, "calt" 1;
+  scroll-behavior: smooth;
+  min-height: 100vh;
+}
+
+/* Custom Sleek Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(10, 10, 15, 0.8);
+}
+
+::-webkit-scrollbar-thumb {
+  background: #2a2a3c;
+  border-radius: 9999px;
+  transition: background 0.2s;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #4338ca;
+}
+
+/* Glow utility classes */
+.glow-planner {
+  box-shadow: 0 0 20px rgba(59, 130, 246, 0.25);
+}
+
+.glow-architect {
+  box-shadow: 0 0 20px rgba(168, 85, 247, 0.25);
+}
+
+.glow-coder {
+  box-shadow: 0 0 20px rgba(16, 185, 129, 0.25);
+}
+
+.glow-tester {
+  box-shadow: 0 0 20px rgba(234, 179, 8, 0.25);
+}
+
+.glow-reviewer {
+  box-shadow: 0 0 20px rgba(249, 115, 22, 0.25);
+}
+
+.glow-devops {
+  box-shadow: 0 0 20px rgba(239, 68, 68, 0.25);
+}
+
+.glow-primary {
+  box-shadow: 0 0 25px rgba(99, 102, 241, 0.3);
+}
+
+/* Background Cyber Grid */
+.bg-grid-pattern {
+  background-size: 24px 24px;
+  background-image: 
+    linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+}
+
+/* Glassmorphism */
+.glass-panel {
+  background: rgba(18, 18, 26, 0.75);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.glass-panel-elevated {
+  background: rgba(24, 24, 36, 0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(99, 102, 241, 0.2);
+}

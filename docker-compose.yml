@@ -1,0 +1,226 @@
+version: "3.8"
+
+services:
+  # ============================================================================
+  # Frontend - Next.js 14 Web Application
+  # ============================================================================
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: masds-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+      - NEXT_PUBLIC_WS_URL=ws://localhost:8000/ws
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - masds-network
+    restart: unless-stopped
+
+  # ============================================================================
+  # Backend - FastAPI Multi-Agent Orchestrator
+  # ============================================================================
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: masds-backend
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://masds:masds@postgres:5432/masds
+      - REDIS_URL=redis://redis:6379/0
+      - CHROMA_HOST=chromadb
+      - CHROMA_PORT=8000
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ACCESS_KEY=minioadmin
+      - MINIO_SECRET_KEY=minioadmin
+      - MINIO_BUCKET=masds-artifacts
+      - MINIO_SECURE=false
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      chromadb:
+        condition: service_started
+      minio:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; sys_exit = 0 if urllib.request.urlopen('http://localhost:8000/health').getcode() == 200 else 1; exit(sys_exit)\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      - masds-network
+    restart: unless-stopped
+
+  # ============================================================================
+  # Celery Worker - Asynchronous Agent Task Execution
+  # ============================================================================
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: masds-worker
+    command: celery -A worker.celery_app worker --loglevel=info --concurrency=4
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://masds:masds@postgres:5432/masds
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://redis:6379/2
+      - CHROMA_HOST=chromadb
+      - CHROMA_PORT=8000
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ACCESS_KEY=minioadmin
+      - MINIO_SECRET_KEY=minioadmin
+      - MINIO_BUCKET=masds-artifacts
+      - MINIO_SECURE=false
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      backend:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - masds-network
+    restart: unless-stopped
+
+  # ============================================================================
+  # PostgreSQL Database - Relational State & Session Store
+  # ============================================================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: masds-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=masds
+      - POSTGRES_PASSWORD=masds
+      - POSTGRES_DB=masds
+      - PGDATA=/var/lib/postgresql/data/pgdata
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U masds -d masds"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - masds-network
+    restart: unless-stopped
+
+  # ============================================================================
+  # Redis - Pub/Sub, Cache & Celery Message Broker
+  # ============================================================================
+  redis:
+    image: redis:7-alpine
+    container_name: masds-redis
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - masds-network
+    restart: unless-stopped
+
+  # ============================================================================
+  # ChromaDB - Vector Database for RAG Knowledge Base
+  # ============================================================================
+  chromadb:
+    image: chromadb/chroma:latest
+    container_name: masds-chromadb
+    ports:
+      - "8001:8000"
+    environment:
+      - IS_PERSISTENT=TRUE
+      - PERSIST_DIRECTORY=/chroma/chroma
+      - ANONYMIZED_TELEMETRY=FALSE
+      - CHROMA_SERVER_AUTH_CREDENTIALS_PROVIDER=chromadb.auth.token.TokenAuthCredentialsProvider
+    volumes:
+      - chromadata:/chroma/chroma
+    networks:
+      - masds-network
+    restart: unless-stopped
+
+  # ============================================================================
+  # MinIO - S3-Compatible Object Store for Generated Artifacts
+  # ============================================================================
+  minio:
+    image: minio/minio:latest
+    container_name: masds-minio
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    command: server /data --console-address ':9001'
+    environment:
+      - MINIO_ROOT_USER=minioadmin
+      - MINIO_ROOT_PASSWORD=minioadmin
+    volumes:
+      - minidata:/data
+    networks:
+      - masds-network
+    restart: unless-stopped
+
+  # ============================================================================
+  # MinIO Initialization - Bucket Provisioning
+  # ============================================================================
+  minio-setup:
+    image: minio/mc:latest
+    container_name: masds-minio-setup
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+      until /usr/bin/mc alias set local http://minio:9000 minioadmin minioadmin; do
+        echo 'Waiting for MinIO service initialization...';
+        sleep 1;
+      done;
+      /usr/bin/mc mb --ignore-existing local/masds-artifacts;
+      /usr/bin/mc anonymous set download local/masds-artifacts;
+      echo 'Bucket masds-artifacts successfully verified/created.';
+      exit 0;
+      "
+    networks:
+      - masds-network
+
+# ============================================================================
+# Networks & Volumes Configuration
+# ============================================================================
+networks:
+  masds-network:
+    driver: bridge
+    name: masds-network
+
+volumes:
+  pgdata:
+    driver: local
+    name: masds-pgdata
+  redisdata:
+    driver: local
+    name: masds-redisdata
+  chromadata:
+    driver: local
+    name: masds-chromadata
+  minidata:
+    driver: local
+    name: masds-minidata
